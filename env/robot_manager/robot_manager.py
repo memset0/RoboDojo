@@ -17,6 +17,10 @@ from env.robot_manager.control_manager import ControlManager, MetaControl
 from utils.ensure_usd_path import ensure_usd_path
 
 
+#: Top of the default scene table (env_cfg/scene/default.yml: centre z 0.74, thickness 0.05).
+DEFAULT_TABLE_TOP_Z = 0.765
+
+
 class RobotManager:
     def __init__(
         self,
@@ -25,8 +29,12 @@ class RobotManager:
         config: DictConfig,
         dt,
         device,
+        table_top_z: float | None = None,
     ):
         self.sim: IsaacRLEnv = None
+        # World z of the table top the planner must avoid; the default matches env_cfg/scene/default.yml
+        # (a 0.05 m thick table centred at z = 0.74, so its top is at 0.765).
+        self.table_top_z = DEFAULT_TABLE_TOP_Z if table_top_z is None else float(table_top_z)
         self.control_manager = ControlManager(num_envs=num_envs, robot_manager=self)
         self.num_envs = num_envs
         self.env_spacing = env_spacing
@@ -545,7 +553,7 @@ class RobotManager:
                 all_joints=robot.arm_joints_name,
                 dt=self.dt,
                 yml_path=robot.curobo_yml_path,
-                table_height=0.74 - root_pose[2],
+                table_height=self.table_top_z - root_pose[2],
             )
             self.ik_solver[robot.robot_name] = self.planner[robot.robot_name]
 
