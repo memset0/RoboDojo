@@ -7,6 +7,15 @@ from env.robot_manager.robot_manager import RobotManager
 from env.scene_manager.scene_manager import SceneManager
 
 
+def table_top_z(scene_config):
+    """World z of the table's top surface: the table is a cube centred at Table.default_pos, scaled by Table.scale
+    (the same height LayoutManager.select_table uses for placing objects). None if the scene has no table."""
+    table = scene_config.get("Table") if scene_config is not None else None
+    if table is None or table.get("default_pos") is None or table.get("scale") is None:
+        return None
+    return float(table["default_pos"][2]) + float(table["scale"][2]) / 2
+
+
 class TaskEnv(BaseEnv):
     def __init__(self, config, app, **kwargs):
         self.sim_config = config.sim
@@ -25,6 +34,7 @@ class TaskEnv(BaseEnv):
             config=self.robot_config,
             dt=self.dt,
             device=self.device,
+            table_top_z=table_top_z(self.scene_config),
         )
         self._interactiveSceneCfg = self.robot_manager._get_SceneCfg(
             num_envs=self.num_envs, env_spacing=self.env_spacing

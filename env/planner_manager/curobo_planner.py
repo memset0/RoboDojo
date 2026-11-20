@@ -483,25 +483,41 @@ class CuroboPlanner:
             "load_dynamics": bool(yml_data.get("load_dynamics", False)),
         }
 
-        # Default: 5cm-thick table; pose[2] is the cuboid centre, so the *top*
-        # surface sits at table_height when centre = table_height - 0.025.
-        scene_model = {
-            "cuboid": {
-                "table": {
-                    "dims": [3.0, 3.0, 0.05],
-                    "pose": [
-                        0.0,
-                        0.0,
-                        float(table_height) - 0.025,
-                        1.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                    ],
-                },
-            }
-        }
+        scene_model = {"cuboid": self._build_table_cuboids(kinematics, table_height)}
         return robot_cfg_v2, scene_model
+
+    @staticmethod
+    def _build_table_cuboids(kinematics, table_height, half_size=1.5, thickness=0.05, base_margin=0.01):
+        """Table cuboids in the arm's base frame, with their top surface at ``table_height``.
+
+        The arm's base sits on the table, and its base-link collision spheres reach slightly below the
+        table top. A single slab would put every configuration in collision, so the slab is split into
+        four pieces that leave an opening around the base-link spheres (plus ``base_margin``).
+        """
+        z = float(table_height) - thickness / 2
+        spheres = kinematics.get("collision_spheres")
+        base_spheres = spheres.get(kinematics.get("base_link"), []) if isinstance(spheres, dict) else []
+        if not base_spheres:
+            return {
+                "table": {"dims": [2 * half_size, 2 * half_size, thickness], "pose": [0.0, 0.0, z, 1.0, 0.0, 0.0, 0.0]}
+            }
+        x0 = min(s["center"][0] - s["radius"] for s in base_spheres) - base_margin
+        x1 = max(s["center"][0] + s["radius"] for s in base_spheres) + base_margin
+        y0 = min(s["center"][1] - s["radius"] for s in base_spheres) - base_margin
+        y1 = max(s["center"][1] + s["radius"] for s in base_spheres) + base_margin
+        pieces = {  # name: (x_min, x_max, y_min, y_max)
+            "table_front": (x1, half_size, -half_size, half_size),
+            "table_back": (-half_size, x0, -half_size, half_size),
+            "table_left": (x0, x1, y1, half_size),
+            "table_right": (x0, x1, -half_size, y0),
+        }
+        return {
+            name: {
+                "dims": [xb - xa, yb - ya, thickness],
+                "pose": [(xa + xb) / 2, (ya + yb) / 2, z, 1.0, 0.0, 0.0, 0.0],
+            }
+            for name, (xa, xb, ya, yb) in pieces.items()
+        }
 
     def _build_motion_planner_cfg(self, max_batch_size):
         cfg = MotionPlannerCfg.create(
